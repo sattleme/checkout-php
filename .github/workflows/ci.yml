@@ -1,0 +1,208 @@
+name: CI
+
+# Every pull request and every push to main: the pinned copy of checkout-spec (a test), the
+# format, the static analysis, and the tests (the conformance vectors, local relays and fakes: no
+# network) on every supported PHP version, with and without gmp, on Linux, Windows and the PHP and
+# OpenSSL of RHEL-family distributions; the SDK's BIP-340 and ECDH against libsecp256k1; the SDK
+# prefixed as plugins embed it, its tests run again on the prefixed copy.
+#
+# The Linux jobs run in containers of official images pinned by digest (PHP's, AlmaLinux's), as
+# root, on a copy of the checkout (tools/ci/in-image.sh): a runner needs a Docker daemon alone, no
+# sudo, nothing installed on it, no path of its own that the daemon must see. Each of those steps
+# runs it with exec: a job cancelled or out of time, the runner signals the step's shell alone, and
+# the script, being that shell, removes its container. Runners: GitHub-hosted ones, at pinned
+# images (ubuntu-24.04, windows-2025): on a public repository, a pull request from a fork must never
+# run on a self-hosted runner (GitHub's advice).
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Format and static analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      IMAGE: php@sha256:d63e8b80cd4c6cfd01cfa7c910522e299cdc7ca1a2b6d6563db48df3c17e6c55 # php:8.4-cli
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Composer's manifest, the format, the static analysis
+        run: |
+          exec sh tools/ci/in-image.sh "$IMAGE" "
+            sh tools/ci/php-image.sh bcmath
+            composer validate --strict
+            composer install --no-interaction --no-progress
+            PHP_CS_FIXER_IGNORE_ENV=1 vendor/bin/php-cs-fixer check --diff
+            vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+          "
+
+  tests:
+    name: Tests (PHP ${{ matrix.php }}, ${{ matrix.math }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # composer.json: PHP 8.2 or later; 8.2 is PHP's oldest version with security fixes.
+        php: ["8.2", "8.3", "8.4", "8.5"]
+        # The SDK needs bcmath only; gmp, when a host has it, must change nothing.
+        math: ["bcmath", "bcmath and gmp"]
+        # PHP's official images (php:<version>-cli, Debian), pinned by digest.
+        include:
+          - php: "8.2"
+            image: php@sha256:604de2f0cba9e9dde16cf717c2f03b0948c99949bdf7c11cdf76326e0da7d2ea
+          - php: "8.3"
+            image: php@sha256:628102249d93494233b54490b785f12db9cd60f4dc89416dfca15973f2125f10
+          - php: "8.4"
+            image: php@sha256:d63e8b80cd4c6cfd01cfa7c910522e299cdc7ca1a2b6d6563db48df3c17e6c55
+          - php: "8.5"
+            image: php@sha256:50956f094e90a716d43bea28087d447555ad80510e386ab8c9c10d8c70d781a9
+    env:
+      IMAGE: ${{ matrix.image }}
+      EXTENSIONS: ${{ matrix.math == 'bcmath' && 'bcmath' || 'bcmath gmp' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The tests
+        run: |
+          exec sh tools/ci/in-image.sh "$IMAGE" "
+            sh tools/ci/php-image.sh $EXTENSIONS
+            composer install --no-interaction --no-progress
+            vendor/bin/phpunit
+          "
+
+  windows:
+    name: Tests (Windows, PHP ${{ matrix.php }})
+    runs-on: windows-2025
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.2", "8.5"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: bcmath, openssl, mbstring, :gmp
+          ini-values: zend.assertions=1, error_reporting=-1
+          coverage: none
+          tools: composer:2.11.2
+      - run: php -r "echo PHP_VERSION, ' ', OPENSSL_VERSION_TEXT, PHP_EOL;"
+      - run: composer install --no-interaction --no-progress
+      # Twice Linux's time on these runners: every time of the tests 4 times longer (TestTime).
+      - run: vendor/bin/phpunit
+        env:
+          SATTLEME_TEST_TIME_SCALE: 4
+
+  rhel:
+    name: Tests (${{ matrix.name }}, the distribution's PHP and OpenSSL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # AlmaLinux 8: OpenSSL 1.1.1 (FIPS build); 9 and 10: OpenSSL 3. CloudLinux and Rocky build
+        # the same packages. Pinned by digest: of a dated tag (8.10-20261027, 9.8-20261027,
+        # 10.2-20261027: docker pull almalinux:<tag>, then its RepoDigests).
+        include:
+          - name: AlmaLinux 8
+            image: almalinux@sha256:2d0f2eb2a83cc09dbc2eb92fade4dbe8f709628149e81aa00aec70630406603b
+          - name: AlmaLinux 9
+            image: almalinux@sha256:245f8aab832fe800aa42bdab5fad75ebbd8e0b4c9f24820a83c638b177857ae2
+          - name: AlmaLinux 10
+            image: almalinux@sha256:5a4b41a427c9717be8f4ac2a32aa22efbae5f9124fbcb79a6765394f312acfe8
+    env:
+      IMAGE: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The distribution's PHP; libsecp256k1's cases, for this OpenSSL too
+        run: |
+          exec sh tools/ci/in-image.sh "$IMAGE" "
+            SATTLEME_DIFFERENTIAL_COUNT=500 SATTLEME_DIFFERENTIAL_SEED=$GITHUB_RUN_ID sh tools/ci/rhel.sh
+          "
+
+  differential:
+    name: BIP-340 and ECDH against libsecp256k1 (PHP ${{ matrix.php }}, ${{ matrix.math }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: "8.2"
+            math: bcmath
+            extensions: bcmath
+            image: php@sha256:604de2f0cba9e9dde16cf717c2f03b0948c99949bdf7c11cdf76326e0da7d2ea
+          - php: "8.5"
+            math: bcmath and gmp
+            extensions: bcmath gmp
+            image: php@sha256:50956f094e90a716d43bea28087d447555ad80510e386ab8c9c10d8c70d781a9
+    env:
+      IMAGE: ${{ matrix.image }}
+      EXTENSIONS: ${{ matrix.extensions }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Cases of libsecp256k1 (coincurve), seeded by the run's id; the SDK against them
+        run: |
+          exec sh tools/ci/in-image.sh "$IMAGE" "
+            sh tools/ci/php-image.sh $EXTENSIONS
+            apt-get install -y -qq --no-install-recommends python3 python3-venv >/dev/null
+            sh tools/ci/cases.sh python3 2000 $GITHUB_RUN_ID build/differential.json
+            composer install --no-interaction --no-progress
+            SATTLEME_DIFFERENTIAL_CASES=build/differential.json vendor/bin/phpunit --testsuite differential --group differential
+          "
+
+  prefixed:
+    name: Prefixed with ${{ matrix.tool }}, as ${{ matrix.for }} embeds it
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tool: strauss
+            for: a WordPress plugin
+            url: https://github.com/BrianHenryIE/strauss/releases/download/0.31.1/strauss.phar
+            sha256: 17dc2baf27b9a3f52834e3db729c8365d8915a80e37a087d253cf705387aa887
+          - tool: scoper
+            for: a PrestaShop module
+            url: https://github.com/humbug/php-scoper/releases/download/0.18.20/php-scoper.phar
+            sha256: 5e35e4a89ea53b2c70a19bfa8a856e4f9080aa12eb13a5bce650bb69d08eb122
+    env:
+      IMAGE: php@sha256:604de2f0cba9e9dde16cf717c2f03b0948c99949bdf7c11cdf76326e0da7d2ea # php:8.2-cli
+      TOOL: ${{ matrix.tool }}
+      URL: ${{ matrix.url }}
+      SHA256: ${{ matrix.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The tool, its checksum checked; the prefixed copy, its tests
+        run: |
+          exec sh tools/ci/in-image.sh "$IMAGE" "
+            sh tools/ci/php-image.sh bcmath zip
+            mkdir -p build
+            curl -fsSL -o build/$TOOL.phar $URL
+            echo '$SHA256  build/$TOOL.phar' | sha256sum -c -
+            composer install --no-interaction --no-progress
+            sh tools/prefix/build.sh $TOOL build/$TOOL.phar
+          "

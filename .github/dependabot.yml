@@ -1,0 +1,42 @@
+# Pull requests that keep the actions, the development dependencies and the differential test's
+# reference up to date: one pull request per ecosystem, grouping all its updates. Each release is
+# taken only once it is a week old (cooldown, as composer.json's own policy for `composer update`):
+# time for a compromised release to be found and pulled before it reaches this repository. The SDK
+# has no runtime dependency.
+version: 2
+updates:
+  # The SHA-pinned actions of .github/workflows/, in one pull request.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The development tools (composer.json, exact versions, and composer.lock), in one pull request.
+  # composer.json's platform (PHP 8.2) keeps them to what runs on every supported PHP.
+  - package-ecosystem: composer
+    directory: /
+    schedule:
+      interval: weekly
+    # Exact versions stay exact.
+    versioning-strategy: increase
+    cooldown:
+      default-days: 7
+    groups:
+      composer:
+        patterns: ["*"]
+
+  # tools/differential/requirements.txt: libsecp256k1's binding, with its hashes, for the CI.
+  - package-ecosystem: pip
+    directory: /tools/differential
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      pip:
+        patterns: ["*"]

@@ -1,0 +1,74 @@
+{
+    "name": "sattleme/checkout",
+    "description": "Take Lightning and on-chain payments for a sattle.me merchant from an online shop's server: invoices, deposit addresses, registry declarations, payment checks.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "bitcoin",
+        "lightning",
+        "lnurl",
+        "nostr",
+        "payments",
+        "sattleme"
+    ],
+    "homepage": "https://github.com/sattleme/checkout-php",
+    "authors": [
+        {
+            "name": "sattle.me",
+            "homepage": "https://sattle.me"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/sattleme/checkout-php/issues",
+        "source": "https://github.com/sattleme/checkout-php",
+        "security": "https://github.com/sattleme/checkout-php/security/policy"
+    },
+    "require": {
+        "php": "^8.2",
+        "ext-bcmath": "*",
+        "ext-hash": "*",
+        "ext-json": "*",
+        "ext-openssl": "*",
+        "ext-pcre": "*"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "3.95.30",
+        "phpstan/phpstan": "2.3.5",
+        "phpstan/phpstan-phpunit": "2.1.2",
+        "phpstan/phpstan-strict-rules": "2.1.1",
+        "phpunit/phpunit": "11.5.57"
+    },
+    "autoload": {
+        "psr-4": {
+            "Sattleme\\Checkout\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Sattleme\\Checkout\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.0"
+        },
+        "policy": {
+            "cooldown": {
+                "period": "7 days"
+            }
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "format": "php-cs-fixer fix",
+        "format:check": "php-cs-fixer check --diff",
+        "check": [
+            "@composer validate --strict",
+            "@format:check",
+            "@analyse",
+            "@test"
+        ]
+    }
+}

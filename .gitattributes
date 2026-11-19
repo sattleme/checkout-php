@@ -1,0 +1,17 @@
+# The pinned copy of checkout-spec and the test vectors are checked byte for byte (SHA-256): never
+# convert their line endings.
+/spec/** -text
+/tests/fixtures/** -text
+
+# Not shipped to the package's users (composer's dist archives, a plugin's embedded copy).
+/.github export-ignore
+/spec export-ignore
+/tests export-ignore
+/tools export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/.php-cs-fixer.dist.php export-ignore
+/phpstan.neon.dist export-ignore
+/phpunit.xml.dist export-ignore
+# The development tools' lock: Composer never reads a dependency's, and a plugin's ZIP would carry it.
+/composer.lock export-ignore
