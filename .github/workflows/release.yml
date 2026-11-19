@@ -1,0 +1,71 @@
+name: Release
+
+# A release is a tag vX.Y.Z that a maintainer pushes on a commit of main (PORTING.md, "Releases").
+# Packagist reads the tags of this public repository itself: the tag is the release, so a ruleset
+# keeps v* tags to the maintainers, and this workflow checks each one at once and reports a bad
+# tag: the CI again, the tag's form, the version the SDK declares (Client::VERSION), its notes in
+# CHANGELOG.md, its commit on main. Then, approved by a maintainer in the protected environment
+# "release", the GitHub release with those notes. No registry credential is stored anywhere.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  tag:
+    name: The tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Its form, the SDK's version, its notes, a commit of main
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! echo "$TAG" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
+            echo "::error::$TAG is not vX.Y.Z"
+            exit 1
+          fi
+          version="$(sed -n "s/^    public const VERSION = '\(.*\)';$/\1/p" src/Client.php)"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::The SDK declares $version (src/Client.php, Client::VERSION), the tag is $TAG"
+            exit 1
+          fi
+          if ! grep -q "^## \[$version\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for $version"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$TAG is not on main"
+            exit 1
+          fi
+
+  release:
+    name: GitHub release
+    needs: [ci, tag]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Required reviewers: a maintainer approves each release.
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The release, with the CHANGELOG's notes of its version
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${TAG#v}"
+          awk -v heading="## [$version]" 'index($0, heading) == 1 { found = 1; next } found && /^## \[/ { exit } found { print }' CHANGELOG.md > notes.md
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --notes-file notes.md
