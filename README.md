@@ -456,9 +456,7 @@ signature's time may depend on its secret. The secrets it signs with are per ord
 derived from the integration key; an attacker would have to time many signatures on your server
 itself.
 
-Development only (exact versions, locked in `composer.lock`, MIT or BSD-3-Clause, none shipped;
-`composer update` takes no release under a week old: `config.policy.cooldown` of
-`composer.json`, Composer 2.11 or later, as Dependabot's cooldown):
+Development only (exact versions, locked in `composer.lock`, MIT or BSD-3-Clause, none shipped):
 
 | Package                                   | Why                                    | Alternative set aside                              | Licence      |
 | ----------------------------------------- | -------------------------------------- | -------------------------------------------------- | ------------ |

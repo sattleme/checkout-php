@@ -1,8 +1,7 @@
 # Pull requests that keep the actions, the development dependencies and the differential test's
 # reference up to date: one pull request per ecosystem, grouping all its updates. Each release is
-# taken only once it is a week old (cooldown, as composer.json's own policy for `composer update`):
-# time for a compromised release to be found and pulled before it reaches this repository. The SDK
-# has no runtime dependency.
+# taken only once it is a week old (cooldown): time for a compromised release to be found and
+# pulled before it reaches this repository. The SDK has no runtime dependency.
 version: 2
 updates:
   # The SHA-pinned actions of .github/workflows/, in one pull request.
