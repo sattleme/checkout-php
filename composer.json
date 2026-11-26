@@ -32,8 +32,8 @@
         "ext-pcre": "*"
     },
     "require-dev": {
-        "friendsofphp/php-cs-fixer": "3.95.30",
-        "phpstan/phpstan": "2.3.5",
+        "friendsofphp/php-cs-fixer": "3.95.32",
+        "phpstan/phpstan": "2.3.7",
         "phpstan/phpstan-phpunit": "2.1.2",
         "phpstan/phpstan-strict-rules": "2.1.1",
         "phpunit/phpunit": "11.5.57"
